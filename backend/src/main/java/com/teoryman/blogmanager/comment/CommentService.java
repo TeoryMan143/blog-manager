@@ -10,6 +10,7 @@ import com.teoryman.blogmanager.user.User;
 import com.teoryman.blogmanager.user.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -20,6 +21,7 @@ public class CommentService {
   @Autowired private PostRepository postRepository;
   @Autowired private UserRepository userRepository;
 
+  @Transactional
   public CommentResponse createComment(String postId, CommentRequest request, String userId) {
     Post post = postRepository.findById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found with id: " + postId));
@@ -36,6 +38,7 @@ public class CommentService {
     return commentMapper.toResponse(saved);
   }
 
+  @Transactional(readOnly = true)
   public List<CommentResponse> getCommentsByPost(String postId) {
     if (!postRepository.existsById(postId)) {
       throw new ResourceNotFoundException("Post not found with id: " + postId);
@@ -44,6 +47,7 @@ public class CommentService {
     return commentMapper.toListResponse(comments);
   }
 
+  @Transactional(readOnly = true)
   public List<CommentResponse> getCommentsByAuthor(String authorId) {
     if (!userRepository.existsById(authorId)) {
       throw new ResourceNotFoundException("User not found");
@@ -52,12 +56,14 @@ public class CommentService {
     return commentMapper.toListResponse(comments);
   }
 
+  @Transactional(readOnly = true)
   public CommentResponse getCommentById(String commentId) {
     Comment comment = commentRepository.findById(commentId)
             .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
     return commentMapper.toResponse(comment);
   }
 
+  @Transactional
   public CommentResponse updateComment(String commentId, CommentRequest request, String userId) {
     Comment comment = findCommentById(commentId);
     validateCommentOwnership(comment, userId);
@@ -67,6 +73,7 @@ public class CommentService {
     return commentMapper.toResponse(saved);
   }
 
+  @Transactional
   public CommentResponse deleteComment(String commentId, String userId) {
     Comment comment = findCommentById(commentId);
     validateCommentOwnership(comment, userId);
