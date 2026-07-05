@@ -7,22 +7,27 @@ import com.teoryman.blogmanager.user.User;
 import com.teoryman.blogmanager.user.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.UUID;
 
 @Service
+@Transactional
 public class RefreshTokenService {
   @Autowired
   private RefreshTokenRepository repo;
   @Autowired
   private UserRepository userRepo;
+  @Autowired
+  private EntityManager entityManager;
 
   public RefreshToken create(String username) {
     User user = userRepo.findByUsername(username).orElseThrow(() -> new ResourceNotFoundException("No user with username: " + username));
 
-    // delete old token if exists
     repo.deleteByUser(user);
+    entityManager.flush();
 
     RefreshToken token = RefreshToken.builder()
             .user(user)

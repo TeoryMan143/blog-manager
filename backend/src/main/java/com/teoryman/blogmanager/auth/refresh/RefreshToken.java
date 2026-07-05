@@ -22,8 +22,8 @@ public class RefreshToken {
   @GeneratedValue(strategy = GenerationType.UUID)
   private String id;
 
-  @OneToOne
-  @JoinColumn(name = "user_id", nullable = false)
+  @OneToOne(optional = false)
+  @JoinColumn(name = "user_id", nullable = false, unique = true)
   @OnDelete(action = OnDeleteAction.CASCADE)
   private User user;
 

@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Data
 @AllArgsConstructor
@@ -16,6 +15,7 @@ public class PostResponse {
   private String title;
   private String content;
   private String userId;
+  private String authorUsername;
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
 
@@ -24,6 +24,7 @@ public class PostResponse {
     this.title = post.getTitle();
     this.content = post.getContent();
     this.userId = post.getAuthor().getId();
+    this.authorUsername = post.getAuthor().getUsername();
     this.createdAt = post.getCreatedAt();
     this.updatedAt = post.getUpdatedAt();
   }

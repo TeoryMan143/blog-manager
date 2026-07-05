@@ -23,7 +23,7 @@ public class Post {
   @Column(columnDefinition = "TEXT")
   private String content;
 
-  @OneToOne
+  @ManyToOne
   @JoinColumn(name = "user_id")
   private User author;
 
