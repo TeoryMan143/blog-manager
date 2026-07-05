@@ -186,8 +186,6 @@ class PostServiceIntegrationTest extends BaseTestContainerIntegrationTest {
             () -> postService.getPostById("non-existent-id"));
   }
 
-  // ---------- new: role-based update/delete authorization ----------
-
   @Test
   @DisplayName("Should allow admin to update a post they do not own")
   void testUpdatePost_asAdmin_shouldSucceedEvenIfNotOwner() {
