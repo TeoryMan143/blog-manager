@@ -21,8 +21,8 @@ public class OpenApiConfig {
                     .description("A scalable blog management system with users, posts, and comments")
                     .contact(new Contact()
                             .name("Blog Manager Support")
-                            .email("support@blogmanager.com")
-                            .url("https://blogmanager.example.com")))
+                            .email("jonathancortestm143@gmail.com")
+                            .url("https://portfoliotm143.vercel.app/")))
             .components(new Components()
                     .addSecuritySchemes("Bearer Authentication",
                             new SecurityScheme()

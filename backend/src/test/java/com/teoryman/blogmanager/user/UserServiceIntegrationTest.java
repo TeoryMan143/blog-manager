@@ -98,7 +98,7 @@ class UserServiceIntegrationTest extends BaseTestContainerIntegrationTest {
   @DisplayName("Should throw UsernameNotFoundException when user not found")
   void testLoadUserByUsernameNotFound() {
     assertThrows(UsernameNotFoundException.class,
-        () -> userService.loadUserByUsername("nonexistent"));
+            () -> userService.loadUserByUsername("nonexistent"));
   }
 
   @Test

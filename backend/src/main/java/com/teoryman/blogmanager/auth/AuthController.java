@@ -22,11 +22,16 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-  @Autowired private AuthenticationManager authManager;
-  @Autowired private JwtUtil jwtUtil;
-  @Autowired private RefreshTokenService refreshTokenService;
-  @Autowired private PasswordEncoder passwordEncoder;
-  @Autowired private UserService userService;
+  @Autowired
+  private AuthenticationManager authManager;
+  @Autowired
+  private JwtUtil jwtUtil;
+  @Autowired
+  private RefreshTokenService refreshTokenService;
+  @Autowired
+  private PasswordEncoder passwordEncoder;
+  @Autowired
+  private UserService userService;
 
   @PostMapping("/login")
   public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest req) {
@@ -67,7 +72,7 @@ public class AuthController {
     String accessToken = jwtUtil.generateToken(userRes.getUsername());
     RefreshToken refreshToken = refreshTokenService.create(userRes.getUsername());
 
-    RegisterResponse res = new RegisterResponse(userRes,  accessToken, refreshToken.getToken());
+    RegisterResponse res = new RegisterResponse(userRes, accessToken, refreshToken.getToken());
     return ResponseEntity.ok(new ApiResponse<>(res, null));
   }
 }

@@ -38,7 +38,7 @@ public class SecurityConfig {
                     .requestMatchers("/v3/api-docs/**").permitAll()
                     .requestMatchers("/swagger-ui/**").permitAll()
                     .requestMatchers("/swagger-ui.html").permitAll()
-                    .requestMatchers("/", "/index.html", "/assets/**", "/*.js", "/*.css").permitAll()
+                    .requestMatchers("/", "/index.html", "/assets/**", "/*.js", "/*.css").permitAll() // frontend
                     .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex.authenticationEntryPoint(restAuthEntryPoint))

@@ -1,6 +1,6 @@
 package com.teoryman.blogmanager.comment;
 
-import com.teoryman.blogmanager.common.exception.ForbiddenException;
+import com.teoryman.blogmanager.auth.roleaccess.PostAuthorizationService;
 import com.teoryman.blogmanager.common.exception.ResourceNotFoundException;
 import com.teoryman.blogmanager.comment.dto.CommentRequest;
 import com.teoryman.blogmanager.comment.dto.CommentResponse;
@@ -9,6 +9,7 @@ import com.teoryman.blogmanager.post.PostRepository;
 import com.teoryman.blogmanager.user.User;
 import com.teoryman.blogmanager.user.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ public class CommentService {
   @Autowired private CommentMapper commentMapper;
   @Autowired private PostRepository postRepository;
   @Autowired private UserRepository userRepository;
+  @Autowired private PostAuthorizationService  postAuthorizationService;
 
   @Transactional
   public CommentResponse createComment(String postId, CommentRequest request, String userId) {
@@ -67,7 +69,6 @@ public class CommentService {
   public CommentResponse updateComment(String commentId, CommentRequest request, String userId) {
     Comment comment = findCommentById(commentId);
     validateCommentOwnership(comment, userId);
-
     comment.setContent(request.getContent());
     Comment saved = commentRepository.save(comment);
     return commentMapper.toResponse(saved);
@@ -76,7 +77,13 @@ public class CommentService {
   @Transactional
   public CommentResponse deleteComment(String commentId, String userId) {
     Comment comment = findCommentById(commentId);
-    validateCommentOwnership(comment, userId);
+    User user = userRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    if (!postAuthorizationService.canDeleteComment(comment, user)) {
+      throw new AccessDeniedException("You are not allowed to delete this comment");
+    }
+
     CommentResponse response = commentMapper.toResponse(comment);
     commentRepository.delete(comment);
     return response;
@@ -89,7 +96,7 @@ public class CommentService {
 
   private void validateCommentOwnership(Comment comment, String userId) {
     if (!comment.getAuthor().getId().equals(userId)) {
-      throw new ForbiddenException("You are not authorized to perform this action on this comment");
+      throw new AccessDeniedException("You are not authorized to perform this action on this comment");
     }
   }
 }

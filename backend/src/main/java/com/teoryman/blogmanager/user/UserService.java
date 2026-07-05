@@ -11,8 +11,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class UserService implements UserDetailsService {
-  @Autowired private UserRepository userRepository;
-  @Autowired private UserMapper userMapper;
+  @Autowired
+  private UserRepository userRepository;
+  @Autowired
+  private UserMapper userMapper;
 
   public UserResponse createUser(UserRequest userRequest) {
     if (userRepository.existsByUsername(userRequest.getUsername())) {
