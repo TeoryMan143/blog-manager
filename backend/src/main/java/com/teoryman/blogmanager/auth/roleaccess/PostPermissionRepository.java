@@ -8,6 +8,7 @@ public interface PostPermissionRepository extends JpaRepository<PostPermission, 
   boolean existsByPost_IdAndGrantee_IdAndPermissionType(String postId, String granteeId, PostPermissionType permission);
 
   List<PostPermission> findByPost_Id(String postId);
+  List<PostPermission> findByPost_IdAndGrantee_Id(String postId, String granteeId);
 
   void deleteByPost_IdAndGrantee_IdAndPermissionType(String postId, String granteeId, PostPermissionType permission);
 }

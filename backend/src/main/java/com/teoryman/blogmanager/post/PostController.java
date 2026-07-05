@@ -1,7 +1,9 @@
 package com.teoryman.blogmanager.post;
 
 import com.teoryman.blogmanager.auth.roleaccess.PostAuthorizationService;
+import com.teoryman.blogmanager.auth.roleaccess.PostPermissionType;
 import com.teoryman.blogmanager.auth.roleaccess.dto.GrantAccessRequest;
+import com.teoryman.blogmanager.auth.roleaccess.dto.PostPermissionResponse;
 import com.teoryman.blogmanager.common.response.ApiResponse;
 import com.teoryman.blogmanager.post.dto.PostRequest;
 import com.teoryman.blogmanager.post.dto.PostResponse;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/posts")
@@ -79,5 +82,23 @@ public class PostController {
   ) {
     postService.revokeAccess(postId, currentUser.getId(), grantAccessRequest);
     return ResponseEntity.status(HttpStatus.OK).body(new ApiResponse<>("Access revoked", null));
+  }
+
+  @GetMapping("/{postId}/access")
+  public ResponseEntity<ApiResponse<List<PostPermissionResponse>>> getAccess(
+          @PathVariable String postId,
+          @AuthenticationPrincipal User currentUser
+  ) {
+    List<PostPermissionResponse> access = postService.getAccessList(postId, currentUser.getId());
+    return ResponseEntity.status(HttpStatus.OK).body(new ApiResponse<>(access, null));
+  }
+
+  @GetMapping("/{postId}/access/mine")
+  public ResponseEntity<ApiResponse<Set<PostPermissionType>>> getMyAccess(
+          @PathVariable String postId,
+          @AuthenticationPrincipal User currentUser
+  ) {
+    Set<PostPermissionType> permissions = postService.getMyPermissions(postId, currentUser.getId());
+    return ResponseEntity.status(HttpStatus.OK).body(new ApiResponse<>(permissions, null));
   }
 }

@@ -1,6 +1,23 @@
 import { useEffect, useMemo, useState, type SubmitEventHandler } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createBlogApi, type StoredAuth } from "./api";
+import {
+	createBlogApi,
+	type PostPermissionType,
+	type PostResponse,
+	type StoredAuth,
+} from "./api";
+
+const ALL_PERMISSIONS: PostPermissionType[] = [
+	"MODIFY",
+	"DELETE",
+	"DELETE_COMMENTS",
+];
+
+const permissionLabels: Record<PostPermissionType, string> = {
+	MODIFY: "Modify",
+	DELETE: "Delete",
+	DELETE_COMMENTS: "Delete comments",
+};
 
 const AUTH_STORAGE_KEY = "blog-manager-auth";
 const API_BASE_URL_STORAGE_KEY = "blog-manager-api-base-url";
@@ -95,6 +112,10 @@ function App() {
 	const [commentForm, setCommentForm] = useState("");
 	const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
+	const [accessForm, setAccessForm] = useState<{
+		username: string;
+		permissions: Set<PostPermissionType>;
+	}>({ username: "", permissions: new Set() });
 
 	useEffect(() => {
 		if (typeof window === "undefined") {
@@ -149,6 +170,32 @@ function App() {
 		enabled: Boolean(auth?.accessToken && selectedPostId),
 	});
 
+	const currentUserQuery = useQuery({
+		queryKey: ["currentUser", apiBaseUrl, auth?.accessToken ?? "guest"],
+		queryFn: api.getCurrentUser,
+		enabled: Boolean(auth?.accessToken),
+	});
+
+	const currentUser = currentUserQuery.data ?? null;
+	const isAdmin = currentUser?.role === "ADMIN";
+	const isModerator = currentUser?.role === "MODERATOR";
+
+	const isOwner = (post: PostResponse | null | undefined) =>
+		Boolean(currentUser && post && post.userId === currentUser.id);
+
+	const myAccessQuery = useQuery({
+		queryKey: [
+			"myAccess",
+			selectedPostId,
+			apiBaseUrl,
+			auth?.accessToken ?? "guest",
+		],
+		queryFn: () => api.getMyPostAccess(selectedPostId ?? ""),
+		enabled: Boolean(auth?.accessToken && selectedPostId),
+	});
+
+	const myPermissions = new Set(myAccessQuery.data ?? []);
+
 	const visiblePosts = (postsQuery.data ?? []).filter((post) => {
 		const haystack = `${post.title} ${post.content}`.toLowerCase();
 		return haystack.includes(search.toLowerCase());
@@ -156,6 +203,25 @@ function App() {
 
 	const selectedPost = selectedPostQuery.data ?? null;
 	const comments = commentsQuery.data ?? [];
+
+	const canManageSelectedPostAccess = Boolean(
+		auth && selectedPost && (isAdmin || isOwner(selectedPost)),
+	);
+
+	const accessListQuery = useQuery({
+		queryKey: [
+			"postAccess",
+			selectedPostId,
+			apiBaseUrl,
+			auth?.accessToken ?? "guest",
+		],
+		queryFn: () => api.getPostAccess(selectedPostId ?? ""),
+		enabled: Boolean(
+			auth?.accessToken && selectedPostId && canManageSelectedPostAccess,
+		),
+	});
+
+	const accessList = accessListQuery.data ?? [];
 
 	useEffect(() => {
 		if (!selectedPost) {
@@ -193,6 +259,10 @@ function App() {
 			setEditingCommentId(null);
 		}
 	}, [auth]);
+
+	useEffect(() => {
+		setAccessForm({ username: "", permissions: new Set() });
+	}, [selectedPostId]);
 
 	const loginMutation = useMutation({
 		mutationFn: () =>
@@ -319,6 +389,49 @@ function App() {
 		},
 	});
 
+	const grantAccessMutation = useMutation({
+		mutationFn: async (payload: {
+			postId: string;
+			username: string;
+			permissions: PostPermissionType[];
+		}) => {
+			const grantee = await api.getUserByUsername(payload.username);
+			await api.grantAccess(payload.postId, {
+				granteeUserId: grantee.id,
+				permissions: payload.permissions,
+			});
+		},
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({
+				queryKey: ["postAccess", variables.postId],
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["myAccess", variables.postId],
+			});
+			setAccessForm({ username: "", permissions: new Set() });
+		},
+	});
+
+	const revokeAccessMutation = useMutation({
+		mutationFn: (payload: {
+			postId: string;
+			granteeUserId: string;
+			permissionType: PostPermissionType;
+		}) =>
+			api.revokeAccess(payload.postId, {
+				granteeUserId: payload.granteeUserId,
+				permissions: [payload.permissionType],
+			}),
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({
+				queryKey: ["postAccess", variables.postId],
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["myAccess", variables.postId],
+			});
+		},
+	});
+
 	const canMutate = Boolean(auth?.accessToken);
 	const activePost =
 		selectedPost ??
@@ -326,6 +439,29 @@ function App() {
 			? (visiblePosts.find((post) => post.id === selectedPostId) ?? null)
 			: null);
 	const activePostId = activePost?.id ?? null;
+
+	const canEditActivePost = Boolean(
+		auth &&
+			activePost &&
+			(isAdmin || isOwner(activePost) || myPermissions.has("MODIFY")),
+	);
+	const canDeleteActivePost = Boolean(
+		auth &&
+			activePost &&
+			(isAdmin || isOwner(activePost) || myPermissions.has("DELETE")),
+	);
+	const canDeleteCommentsOnActivePost = Boolean(
+		auth &&
+			activePost &&
+			(isAdmin ||
+				isModerator ||
+				isOwner(activePost) ||
+				myPermissions.has("DELETE_COMMENTS")),
+	);
+
+	const canDeleteComment = (comment: { authorId: string }) =>
+		canDeleteCommentsOnActivePost ||
+		Boolean(currentUser && comment.authorId === currentUser.id);
 
 	const handleAuthSubmit: SubmitEventHandler<HTMLFormElement> = (event) => {
 		event.preventDefault();
@@ -340,6 +476,10 @@ function App() {
 	const handleSavePost: SubmitEventHandler<HTMLFormElement> = (event) => {
 		event.preventDefault();
 		if (!canMutate) {
+			return;
+		}
+
+		if (selectedPostId && !canEditActivePost) {
 			return;
 		}
 
@@ -365,6 +505,36 @@ function App() {
 		});
 	};
 
+	const toggleAccessPermission = (permission: PostPermissionType) => {
+		setAccessForm((current) => {
+			const next = new Set(current.permissions);
+			if (next.has(permission)) {
+				next.delete(permission);
+			} else {
+				next.add(permission);
+			}
+			return { ...current, permissions: next };
+		});
+	};
+
+	const handleGrantAccess: SubmitEventHandler<HTMLFormElement> = (event) => {
+		event.preventDefault();
+		if (!activePostId || !accessForm.username.trim()) {
+			return;
+		}
+
+		const permissions = Array.from(accessForm.permissions);
+		if (permissions.length === 0) {
+			return;
+		}
+
+		grantAccessMutation.mutate({
+			postId: activePostId,
+			username: accessForm.username.trim(),
+			permissions,
+		});
+	};
+
 	const panelError =
 		(postsQuery.error instanceof Error && postsQuery.error.message) ||
 		(selectedPostQuery.error instanceof Error &&
@@ -385,6 +555,13 @@ function App() {
 		(deleteCommentMutation.error instanceof Error &&
 			deleteCommentMutation.error.message) ||
 		(logoutMutation.error instanceof Error && logoutMutation.error.message);
+
+	const accessError =
+		(accessListQuery.error instanceof Error && accessListQuery.error.message) ||
+		(grantAccessMutation.error instanceof Error &&
+			grantAccessMutation.error.message) ||
+		(revokeAccessMutation.error instanceof Error &&
+			revokeAccessMutation.error.message);
 
 	return (
 		<div className="relative min-h-screen overflow-hidden bg-[#07111f] text-slate-100">
@@ -588,8 +765,13 @@ function App() {
 										<div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
 											Username
 										</div>
-										<div className="mt-2 text-base text-white">
+										<div className="mt-2 flex items-center gap-2 text-base text-white">
 											{auth.username}
+											{currentUser ? (
+												<span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+													{currentUser.role}
+												</span>
+											) : null}
 										</div>
 									</div>
 									<div className={insetPanelClass}>
@@ -684,7 +866,7 @@ function App() {
 									>
 										New post
 									</button>
-									{selectedPost ? (
+									{selectedPost && canDeleteActivePost ? (
 										<button
 											type="button"
 											className={dangerButtonClass}
@@ -713,7 +895,9 @@ function App() {
 												}))
 											}
 											placeholder="A sharper blog post title"
-											disabled={!auth}
+											disabled={
+												!auth || (Boolean(selectedPost) && !canEditActivePost)
+											}
 										/>
 									</label>
 									<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-400">
@@ -741,7 +925,9 @@ function App() {
 											}))
 										}
 										placeholder="Write a post body that is easy to scan, then update it live."
-										disabled={!auth}
+										disabled={
+											!auth || (Boolean(selectedPost) && !canEditActivePost)
+										}
 									/>
 								</label>
 
@@ -751,11 +937,22 @@ function App() {
 									</div>
 								) : null}
 
+								{selectedPost && !canEditActivePost ? (
+									<div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+										You don't have permission to edit this post. Ask the owner
+										or an admin for a Modify grant.
+									</div>
+								) : null}
+
 								<div className="flex flex-wrap items-center gap-3">
 									<button
 										type="submit"
 										className={primaryButtonClass}
-										disabled={!auth || upsertPostMutation.isPending}
+										disabled={
+											!auth ||
+											upsertPostMutation.isPending ||
+											(Boolean(selectedPost) && !canEditActivePost)
+										}
 									>
 										{upsertPostMutation.isPending
 											? selectedPost
@@ -854,7 +1051,9 @@ function App() {
 
 													<div className="space-y-3 text-sm text-slate-400 md:text-right">
 														<div>{formatDate(post.createdAt)}</div>
-														<div>Author: {post.authorUsername ?? post.userId}</div>
+														<div>
+															Author: {post.authorUsername ?? post.userId}
+														</div>
 														<div className="flex flex-wrap gap-2 md:justify-end">
 															<button
 																type="button"
@@ -868,17 +1067,19 @@ function App() {
 															>
 																Open
 															</button>
-															<button
-																type="button"
-																className={dangerButtonClass}
-																disabled={deletePostMutation.isPending}
-																onClick={(event) => {
-																	event.stopPropagation();
-																	deletePostMutation.mutate(post.id);
-																}}
-															>
-																Delete
-															</button>
+															{isAdmin || isOwner(post) ? (
+																<button
+																	type="button"
+																	className={dangerButtonClass}
+																	disabled={deletePostMutation.isPending}
+																	onClick={(event) => {
+																		event.stopPropagation();
+																		deletePostMutation.mutate(post.id);
+																	}}
+																>
+																	Delete
+																</button>
+															) : null}
 														</div>
 													</div>
 												</div>
@@ -951,6 +1152,121 @@ function App() {
 								</div>
 							)}
 						</section>
+
+						{selectedPost && canManageSelectedPostAccess ? (
+							<section className={panelClass}>
+								<div>
+									<p className="text-xs uppercase tracking-[0.24em] text-cyan-200/80">
+										Sharing
+									</p>
+									<h2 className="mt-2 text-xl font-semibold text-white">
+										Access control
+									</h2>
+									<p className="mt-2 text-sm text-slate-400">
+										Grant another user Modify, Delete, or Delete-comments rights
+										on this post.
+									</p>
+								</div>
+
+								{accessError ? (
+									<div className="mt-4 rounded-2xl border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+										{accessError}
+									</div>
+								) : null}
+
+								<form className="mt-5 space-y-4" onSubmit={handleGrantAccess}>
+									<label className="block text-sm font-medium text-slate-200">
+										Grant to username
+										<input
+											className={inputClass}
+											value={accessForm.username}
+											onChange={(event) =>
+												setAccessForm((current) => ({
+													...current,
+													username: event.target.value,
+												}))
+											}
+											placeholder="teoryman"
+										/>
+									</label>
+
+									<div className="flex flex-wrap gap-2">
+										{ALL_PERMISSIONS.map((permission) => {
+											const checked = accessForm.permissions.has(permission);
+											return (
+												<button
+													key={permission}
+													type="button"
+													onClick={() => toggleAccessPermission(permission)}
+													className={`rounded-2xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
+														checked
+															? "border-cyan-400/40 bg-cyan-400/15 text-cyan-100"
+															: "border-white/10 bg-slate-950/40 text-slate-300 hover:border-white/20"
+													}`}
+												>
+													{permissionLabels[permission]}
+												</button>
+											);
+										})}
+									</div>
+
+									<button
+										type="submit"
+										className={primaryButtonClass}
+										disabled={grantAccessMutation.isPending}
+									>
+										{grantAccessMutation.isPending
+											? "Granting…"
+											: "Grant access"}
+									</button>
+								</form>
+
+								<div className="mt-6 space-y-3">
+									<div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+										Current grants
+									</div>
+									{accessListQuery.isLoading ? (
+										<div className={insetPanelClass}>Loading grants…</div>
+									) : accessList.length === 0 ? (
+										<div
+											className={`${insetPanelClass} text-sm text-slate-400`}
+										>
+											No one else has explicit access to this post yet.
+										</div>
+									) : (
+										accessList.map((grant) => (
+											<div
+												key={grant.id}
+												className={`${insetPanelClass} flex items-center justify-between gap-3`}
+											>
+												<div>
+													<div className="text-sm font-semibold text-white">
+														{grant.granteeUsername}
+													</div>
+													<div className="text-xs text-slate-400">
+														{permissionLabels[grant.permissionType]}
+													</div>
+												</div>
+												<button
+													type="button"
+													className={secondaryButtonClass}
+													disabled={revokeAccessMutation.isPending}
+													onClick={() =>
+														revokeAccessMutation.mutate({
+															postId: selectedPost.id,
+															granteeUserId: grant.granteeId,
+															permissionType: grant.permissionType,
+														})
+													}
+												>
+													Revoke
+												</button>
+											</div>
+										))
+									)}
+								</div>
+							</section>
+						) : null}
 
 						<section className={panelClass}>
 							<div className="flex items-center justify-between gap-3">
@@ -1045,33 +1361,38 @@ function App() {
 																</div>
 															</div>
 															<div className="flex shrink-0 gap-2">
-																<button
-																	type="button"
-																	className={secondaryButtonClass}
-																	onClick={() => {
-																		setEditingCommentId(comment.id);
-																		setCommentForm(comment.content);
-																	}}
-																>
-																	Edit
-																</button>
-																<button
-																	type="button"
-																	className={dangerButtonClass}
-																	disabled={deleteCommentMutation.isPending}
-																	onClick={() => {
-																		if (!activePostId) {
-																			return;
-																		}
+																{currentUser &&
+																comment.authorId === currentUser.id ? (
+																	<button
+																		type="button"
+																		className={secondaryButtonClass}
+																		onClick={() => {
+																			setEditingCommentId(comment.id);
+																			setCommentForm(comment.content);
+																		}}
+																	>
+																		Edit
+																	</button>
+																) : null}
+																{canDeleteComment(comment) ? (
+																	<button
+																		type="button"
+																		className={dangerButtonClass}
+																		disabled={deleteCommentMutation.isPending}
+																		onClick={() => {
+																			if (!activePostId) {
+																				return;
+																			}
 
-																		deleteCommentMutation.mutate({
-																			postId: activePostId,
-																			commentId: comment.id,
-																		});
-																	}}
-																>
-																	Delete
-																</button>
+																			deleteCommentMutation.mutate({
+																				postId: activePostId,
+																				commentId: comment.id,
+																			});
+																		}}
+																	>
+																		Delete
+																	</button>
+																) : null}
 															</div>
 														</div>
 													</article>

@@ -4,10 +4,22 @@ export type StoredAuth = {
 	refreshToken: string;
 };
 
+export type Role = "COMMON" | "MODERATOR" | "ADMIN";
+
+export type PostPermissionType = "MODIFY" | "DELETE" | "DELETE_COMMENTS";
+
 export type UserResponse = {
 	id: string;
 	username: string;
 	email: string;
+	role: Role;
+};
+
+export type PostPermissionResponse = {
+	id: string;
+	granteeId: string;
+	granteeUsername: string;
+	permissionType: PostPermissionType;
 };
 
 export type PostResponse = {
@@ -50,6 +62,11 @@ export type CommentRequest = {
 	content: string;
 };
 
+export type GrantAccessRequest = {
+	granteeUserId: string;
+	permissions: PostPermissionType[];
+};
+
 export type AuthResponse = {
 	accessToken: string;
 	refreshToken: string;
@@ -88,6 +105,8 @@ export type BlogApi = {
 	register: (request: RegisterRequest) => Promise<RegisterResponse>;
 	logout: (username: string) => Promise<void>;
 	refresh: () => Promise<RefreshResponse>;
+	getCurrentUser: () => Promise<UserResponse>;
+	getUserByUsername: (username: string) => Promise<UserResponse>;
 	getPosts: () => Promise<PostResponse[]>;
 	getPost: (id: string) => Promise<PostResponse>;
 	createPost: (request: PostRequest) => Promise<PostResponse>;
@@ -108,6 +127,10 @@ export type BlogApi = {
 		postId: string,
 		commentId: string,
 	) => Promise<CommentResponse>;
+	getPostAccess: (postId: string) => Promise<PostPermissionResponse[]>;
+	getMyPostAccess: (postId: string) => Promise<PostPermissionType[]>;
+	grantAccess: (postId: string, request: GrantAccessRequest) => Promise<void>;
+	revokeAccess: (postId: string, request: GrantAccessRequest) => Promise<void>;
 };
 
 export function createBlogApi(
@@ -272,6 +295,11 @@ export function createBlogApi(
 				{ authRequired: false },
 			);
 		},
+		getCurrentUser: () => request<UserResponse>("/api/users/me"),
+		getUserByUsername: (username) =>
+			request<UserResponse>(
+				`/api/users/by-username/${encodeURIComponent(username)}`,
+			),
 		getPosts: () => request<PostResponse[]>("/api/posts"),
 		getPost: (id) => request<PostResponse>(`/api/posts/${id}`),
 		createPost: (requestBody) =>
@@ -305,6 +333,20 @@ export function createBlogApi(
 		deleteComment: (postId, commentId) =>
 			request<CommentResponse>(`/api/posts/${postId}/comments/${commentId}`, {
 				method: "DELETE",
+			}),
+		getPostAccess: (postId) =>
+			request<PostPermissionResponse[]>(`/api/posts/${postId}/access`),
+		getMyPostAccess: (postId) =>
+			request<PostPermissionType[]>(`/api/posts/${postId}/access/mine`),
+		grantAccess: (postId, requestBody) =>
+			request<void>(`/api/posts/${postId}/access`, {
+				method: "POST",
+				body: JSON.stringify(requestBody),
+			}),
+		revokeAccess: (postId, requestBody) =>
+			request<void>(`/api/posts/${postId}/access`, {
+				method: "DELETE",
+				body: JSON.stringify(requestBody),
 			}),
 	};
 }

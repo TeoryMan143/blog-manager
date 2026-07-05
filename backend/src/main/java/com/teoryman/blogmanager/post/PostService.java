@@ -5,6 +5,7 @@ import com.teoryman.blogmanager.auth.roleaccess.PostPermission;
 import com.teoryman.blogmanager.auth.roleaccess.PostPermissionRepository;
 import com.teoryman.blogmanager.auth.roleaccess.PostPermissionType;
 import com.teoryman.blogmanager.auth.roleaccess.dto.GrantAccessRequest;
+import com.teoryman.blogmanager.auth.roleaccess.dto.PostPermissionResponse;
 import com.teoryman.blogmanager.common.exception.ResourceNotFoundException;
 import com.teoryman.blogmanager.post.dto.PostRequest;
 import com.teoryman.blogmanager.post.dto.PostResponse;
@@ -130,5 +131,26 @@ public class PostService {
         postPermissionRepository.deleteByPost_IdAndGrantee_IdAndPermissionType(postId, grantee.getId(), permission);
       }
     }
+  }
+
+  @Transactional(readOnly = true)
+  public List<PostPermissionResponse> getAccessList(String postId, String requestingUserId) {
+    Post post = findPostById(postId);
+    User requestingUser = findUserById(requestingUserId);
+
+    if (!postAuthorizationService.canGrantAccess(post, requestingUser)) {
+      throw new AccessDeniedException("Only the post owner or an admin can view access grants");
+    }
+
+    return postPermissionRepository.findByPost_Id(postId).stream()
+            .map(PostPermissionResponse::new)
+            .toList();
+  }
+
+  @Transactional(readOnly = true)
+  public java.util.Set<PostPermissionType> getMyPermissions(String postId, String userId) {
+    return postPermissionRepository.findByPost_IdAndGrantee_Id(postId, userId).stream()
+            .map(PostPermission::getPermissionType)
+            .collect(java.util.stream.Collectors.toSet());
   }
 }
