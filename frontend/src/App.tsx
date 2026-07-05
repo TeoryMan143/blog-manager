@@ -4,7 +4,10 @@ import { createBlogApi, type StoredAuth } from "./api";
 
 const AUTH_STORAGE_KEY = "blog-manager-auth";
 const API_BASE_URL_STORAGE_KEY = "blog-manager-api-base-url";
-const DEFAULT_API_BASE_URL = "http://localhost:8080";
+const DEFAULT_API_BASE_URL =
+	typeof window !== "undefined" && window.location.hostname === "localhost"
+		? "http://localhost:8080"
+		: window.location.origin;
 
 const panelClass =
 	"rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-2xl shadow-slate-950/40 backdrop-blur-xl";
